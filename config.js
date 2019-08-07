@@ -2,7 +2,7 @@ const Ip = require('ip');
 console.log('Internal IP is %s', Ip.address());
 
 module.exports = {
-    ip: '0.0.0.0',
+    ip: '127.0.0.1',
     internalIp: Ip.address(),
     port: 8080,
     path: '/server',
@@ -57,8 +57,13 @@ module.exports = {
         },
         plainRtpTransport: {
             listenIp: {
-                ip: Ip.address(),
+                //ip: Ip.address(),
+                ip: '127.0.0.1',
                 announcedIp: null
+            },
+            listenPort: {
+                audioPort: 5006,
+                videoPort: 5004
             },
             maxSctpMessageSize: 262144
         }
