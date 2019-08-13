@@ -112,8 +112,8 @@ function joinSession() {
                 console.error('browser not supported');
         }
         device.load({
-                routerRtpCapabilities: response.rtpCapabilities
-            })
+            routerRtpCapabilities: response.rtpCapabilities
+        })
             .then(() => {
                 let canProduce = [];
                 if (device.canProduce('audio')) {
@@ -228,14 +228,14 @@ function publish() {
             transport.produce({
                 track: videoTrack,
                 encodings: [{
-                        maxBitrate: 100000
-                    },
-                    {
-                        maxBitrate: 300000
-                    },
-                    {
-                        maxBitrate: 900000
-                    }
+                    maxBitrate: 100000
+                },
+                {
+                    maxBitrate: 300000
+                },
+                {
+                    maxBitrate: 900000
+                }
                 ],
                 codecOptions: {
                     videoGoogleStartBitrate: 1000
@@ -347,11 +347,11 @@ function subscribe() {
 
             // Consume video
             transport.consume({
-                    id: response.video.id,
-                    producerId: response.video.producerId,
-                    kind: response.video.kind,
-                    rtpParameters: response.video.rtpParameters
-                })
+                id: response.video.id,
+                producerId: response.video.producerId,
+                kind: response.video.kind,
+                rtpParameters: response.video.rtpParameters
+            })
                 .then(videoConsumer => {
                     videoConsumers.set(videoConsumer.id, videoConsumer);
 
@@ -367,11 +367,11 @@ function subscribe() {
 
             // Consume audio
             transport.consume({
-                    id: response.audio.id,
-                    producerId: response.audio.producerId,
-                    kind: response.audio.kind,
-                    rtpParameters: response.audio.rtpParameters
-                })
+                id: response.audio.id,
+                producerId: response.audio.producerId,
+                kind: response.audio.kind,
+                rtpParameters: response.audio.rtpParameters
+            })
                 .then(audioConsumer => {
                     audioConsumers.set(audioConsumer.id, audioConsumer);
 

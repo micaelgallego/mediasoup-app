@@ -285,16 +285,16 @@ socketServer.on('connection', socket => {
         const videoProducerId = data.videoProducerId;
         const audioProducerId = data.audioProducerId;
         if (!sessionRouter.canConsume({
-                producerId: data.videoProducerId,
-                rtpCapabilities: data.rtpCapabilities
-            })) {
+            producerId: data.videoProducerId,
+            rtpCapabilities: data.rtpCapabilities
+        })) {
             console.error('Can NOT consume video');
             return;
         }
         if (!sessionRouter.canConsume({
-                producerId: data.audioProducerId,
-                rtpCapabilities: data.rtpCapabilities
-            })) {
+            producerId: data.audioProducerId,
+            rtpCapabilities: data.rtpCapabilities
+        })) {
             console.error('Can NOT consume audio');
             return;
         }
@@ -629,8 +629,8 @@ function createRouter(worker) {
         }
         const mediaCodecs = SERVER_CONFIG.mediasoup.router.mediaCodecs;
         worker.createRouter({
-                mediaCodecs
-            })
+            mediaCodecs
+        })
             .then(router => {
                 resolve(router);
             }).catch(error => {
