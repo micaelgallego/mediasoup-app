@@ -43,7 +43,7 @@ httpsServer.listen(SERVER_CONFIG.port, SERVER_CONFIG.ip, () => {
     // Set internal ip in SDP file
     /*
     var fs = require('fs');
-    const sdpPaths = ['./recording/audioVideo.sdp', './recording/onlyAudio.sdp', './recording/onlyVideo.sdp'];
+    const sdpPaths = ['./recording/input.sdp'];
     const REGEX = /c=IN IP4 \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/g;
     const REPLACEMENT = 'c=IN IP4 ' + SERVER_CONFIG.internalIp;
 

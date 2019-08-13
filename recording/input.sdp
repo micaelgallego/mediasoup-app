@@ -5,4 +5,5 @@ c=IN IP4 127.0.0.1
 t=0 0
 m=audio 5006 RTP/AVP 109
 a=rtpmap:109 opus/48000/2
-a=recvonly
+m=video 5004 RTP/AVP 120
+a=rtpmap:120 VP8/90000
