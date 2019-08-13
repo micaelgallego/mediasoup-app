@@ -403,6 +403,8 @@ socketServer.on('connection', socket => {
     socket.on('record', async (data, callback) => {
 
         // Session handling
+        // ================
+
         const sessionId = data.sessionId;
         if (!recordings.get(sessionId)) {
             recordings.set(sessionId, {
@@ -417,71 +419,144 @@ socketServer.on('connection', socket => {
         const audioProducerId = data.audioProducerId;
         const videoProducerId = data.videoProducerId;
 
-        /*
-         * ====
-         * NOTE
-         * ====
+        const recording = recordings.get(sessionId);
+
+
+
+        // Transport and consumer
+        // ======================
+
+        const sessionRouter = sessions.get(sessionId).router;
+
+        if (hasAudio) {
+            sessionRouter.createPlainRtpTransport(SERVER_CONFIG.mediasoup.plainRtpTransport)
+                .then(plainRtpTransport => {
+                    recording.transports.push(plainRtpTransport);
+
+                    plainRtpTransport.connect({
+                        ip: SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip,
+                        port: SERVER_CONFIG.mediasoup.plainRtpTransport.listenPort.audioPort
+                    }).then(() => {
+                        console.log('AUDIO PlainRtpTransport connected');
+                        plainRtpTransport.consume({
+                            producerId: audioProducerId,
+                            rtpCapabilities: sessionRouter.rtpCapabilities,
+                            paused: true
+                        }).then(consumer => {
+                            recording.consumers.push(consumer);
+                            console.log('PlainRtpTransport consuming AUDIO');
+                        }).catch(error => {
+                            console.error(error);
+                        });
+                    }).catch(error => {
+                        console.error(error);
+                    });
+                }).catch(error => {
+                    console.error(error);
+                });
+        }
+
+        if (hasVideo) {
+            sessionRouter.createPlainRtpTransport(SERVER_CONFIG.mediasoup.plainRtpTransport)
+                .then(plainRtpTransport => {
+                    recording.transports.push(plainRtpTransport);
+
+                    plainRtpTransport.connect({
+                        ip: SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip,
+                        port: SERVER_CONFIG.mediasoup.plainRtpTransport.listenPort.videoPort
+                    }).then(() => {
+                        console.log('VIDEO PlainRtpTransport connected');
+                        plainRtpTransport.consume({
+                            producerId: videoProducerId,
+                            rtpCapabilities: sessionRouter.rtpCapabilities,
+                            paused: true
+                        }).then(consumer => {
+                            recording.consumers.push(consumer);
+                            console.log('PlainRtpTransport consuming VIDEO');
+                        }).catch(error => {
+                            console.error(error);
+                        });
+                    }).catch(error => {
+                        console.error(error);
+                    });
+                }).catch(error => {
+                    console.error(error);
+                });
+        }
+
+
+
+        // FFmpeg recording
+        // ================
+
+        /* NOTE
+         * ----
          *
          * The objective here is to record the RTP stream as is received from
          * the media server, i.e. WITHOUT TRANSCODING. Hence the "codec copy"
          * commands in FFmpeg.
+         *
+         * '-map 0:x:0' ensures that one media of each type is used.
          */
 
-        let cmdFileIn;
-        let cmdFileOut;
+        let cmdFileIn = __dirname + '/recording/input.sdp';
+        let cmdFileOut = '';
+        let cmdFormat = '';
         let cmdCodec = '-an -vn';
-        if (hasAudio) {
-            cmdFileIn = __dirname + '/recording/onlyAudio.sdp';
 
-            // Fails on FFmpeg 2.x and 4.x:
-            // [opus] No extradata present
-            // Could not write header for output file #0 (incorrect codec parameters ?): Invalid data found when processing input
-            // cmdFileOut = __dirname + '/recording/recording.opus';
-
-            // Works because WEBM accepts incorrect OPUS media
-            // (plays with ffplay but not with VLC)
-            cmdFileOut = __dirname + '/recording/recording.webm';
-
-            cmdCodec = '-map 0:a -acodec copy -vn';
-        }
-        if (hasVideo) {
-            cmdFileIn = __dirname + '/recording/onlyVideo.sdp';
-
-            // Works because WEBM accepts VP8 media
-            // (plays with ffplay and with VLC)
-            cmdFileOut = __dirname + '/recording/recording.webm';
-
-            cmdCodec = '-map 0:v -vcodec copy -an';
-        }
         if (hasAudio && hasVideo) {
-            cmdFileIn = __dirname + '/recording/audioVideo.sdp';
-
             // Fails on FFmpeg 2.x and 4.x:
             // [sdp] Could not find codec parameters for stream 1 (Video: vp8, yuv420p): unspecified size
             // [webm] dimensions not set
             cmdFileOut = __dirname + '/recording/recording.webm';
+            cmdFormat = '-f webm -flags +global_header';
 
-            cmdCodec = '-map 0:a -map 0:v -acodec copy -vcodec copy';
+            cmdCodec = '-map 0:a:0 -map 0:v:0 -acodec copy -vcodec copy';
+        }
+        else if (hasAudio) {
+            // Fails on FFmpeg 2.x and 4.x:
+            // [opus] No extradata present
+            // Could not write header for output file #0 (incorrect codec parameters ?): Invalid data found when processing input
+            // cmdFileOut = __dirname + '/recording/recording.opus';
+            // cmdFormat = '-f opus';
+
+            // cmdFileOut = __dirname + '/recording/recording.ogg';
+            // cmdFormat = '-f opus -flags +global_header';
+
+            // Works because WEBM accepts incorrect OPUS media
+            // (plays with ffplay but not with VLC)
+            cmdFileOut = __dirname + '/recording/recording.webm';
+            cmdFormat = '-f webm -flags +global_header';
+
+            cmdCodec = '-acodec copy -vn';
+        }
+        else if (hasVideo) {
+            // Works because WEBM accepts VP8 media
+            // (plays with ffplay and with VLC)
+            cmdFileOut = __dirname + '/recording/recording.webm';
+            cmdFormat = '-f webm -flags +global_header';
+
+            cmdCodec = '-vcodec copy -an';
         }
 
         let ffmpegStarted = false;
         let recordingStarted = false;
 
         // const cmdProgram = '/usr/bin/ffmpeg';  // System installed
-        const cmdProgram = '/usr/local/bin/ffmpeg';  // User installed
+        const cmdProgram = 'ffmpeg';  // Possibly user installed
         const cmdArgStr = [
             '-protocol_whitelist file,rtp,udp',  // Only for FFmpeg 4.x
             '-nostdin',
-            // '-loglevel debug',
-            // '-analyzeduration 10M',
-            // '-probesize 10M',
+            '-loglevel debug',
+            // '-analyzeduration 5M',
+            // '-probesize 5M',
             // '-thread_queue_size 512',
             // '-s 640x480',
             // '-video_size 640x480',
             '-fflags +genpts',
-            // '-flags +global_header',
             '-i', cmdFileIn,
             cmdCodec,
+            cmdFormat,
             '-y', cmdFileOut
         ].join(' ');
 
@@ -490,7 +565,7 @@ socketServer.on('connection', socket => {
         let ffmpegProcess = Spawn(cmdProgram, cmdArgStr.split(' '), {
             detached: true
         });
-        recordings.get(sessionId).ffmpegProcess = ffmpegProcess;
+        recording.ffmpegProcess = ffmpegProcess;
 
         ffmpegProcess.on('exit', (code, signal) => {
             console.log('Recording process exited with ' + `code ${code} and signal ${signal}`);
@@ -522,68 +597,17 @@ socketServer.on('connection', socket => {
 
         ffmpegProcess.stderr.on('data', data => {
             console.log(data.toString());
+
             if (data.toString().startsWith('ffmpeg version') && !ffmpegStarted) {
                 ffmpegStarted = true;
 
-                const sessionRouter = sessions.get(sessionId).router;
-
-                if (hasAudio) {
-                    sessionRouter.createPlainRtpTransport(SERVER_CONFIG.mediasoup.plainRtpTransport)
-                        .then(plainRtpTransport => {
-                            recordings.get(sessionId).transports.push(plainRtpTransport);
-
-                            plainRtpTransport.connect({
-                                ip: SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip,
-                                port: SERVER_CONFIG.mediasoup.plainRtpTransport.listenPort.audioPort
-                            }).then(() => {
-                                console.log('AUDIO PlainRtpTransport connected');
-                                plainRtpTransport.consume({
-                                    producerId: audioProducerId,
-                                    rtpCapabilities: sessionRouter.rtpCapabilities,
-                                    paused: false
-                                }).then(consumer => {
-                                    recordings.get(sessionId).consumers.push(consumer);
-                                    console.log('PlainRtpTransport consuming AUDIO');
-                                }).catch(error => {
-                                    console.error(error);
-                                });
-                            }).catch(error => {
-                                console.error(error);
-                            });
-                        }).catch(error => {
-                            console.error(error);
-                        });
-                }
-
-                if (hasVideo) {
-                    sessionRouter.createPlainRtpTransport(SERVER_CONFIG.mediasoup.plainRtpTransport)
-                        .then(plainRtpTransport => {
-                            recordings.get(sessionId).transports.push(plainRtpTransport);
-
-                            plainRtpTransport.connect({
-                                ip: SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip,
-                                port: SERVER_CONFIG.mediasoup.plainRtpTransport.listenPort.videoPort
-                            }).then(() => {
-                                console.log('VIDEO PlainRtpTransport connected');
-                                plainRtpTransport.consume({
-                                    producerId: videoProducerId,
-                                    rtpCapabilities: sessionRouter.rtpCapabilities,
-                                    paused: false
-                                }).then(consumer => {
-                                    recordings.get(sessionId).consumers.push(consumer);
-                                    console.log('PlainRtpTransport consuming VIDEO');
-                                }).catch(error => {
-                                    console.error(error);
-                                });
-                            }).catch(error => {
-                                console.error(error);
-                            });
-                        }).catch(error => {
-                            console.error(error);
-                        });
-                }
-
-            } else if (data.toString().startsWith('frame=') && !recordingStarted) {
+                setTimeout(function () {
+                    recording.consumers.forEach(consumer => {
+                        consumer.resume();
+                    });
+                }, 1000);
+            }
+            else if (data.toString().startsWith('frame=') && !recordingStarted) {
                 recordingStarted = true;
                 callback();
             }
@@ -591,9 +615,10 @@ socketServer.on('connection', socket => {
     });
 
     socket.on('stopRecord', async (data, callback) => {
-        stopRecordingCallbackFunction = callback;
-
+        const sessionId = data.sessionId;
         const recording = recordings.get(data.sessionId);
+
+        stopRecordingCallbackFunction = callback;
         recording.ffmpegProcess.kill('SIGINT');
 
         setTimeout(function () {
