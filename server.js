@@ -3,6 +3,7 @@ const Colors = require('colors/safe');
 const Express = require('express');
 const Fs = require('fs');
 const Https = require('https');
+const Kurento = require('kurento-client');
 const MediaSoup = require('mediasoup');
 const SocketServer = require('socket.io');
 const Spawn = require('child_process').spawn;
@@ -628,6 +629,157 @@ socketServer.on('connect', socket => {
             });
         }, 3000);
     });
+
+    // ------------------------------------------------------------------------
+
+    /* Kurento Media Server
+     * ====================
+     */
+
+    let webRtcEp = null;
+    let webRtcEpCandidates = [];
+
+    socket.on('connectKurento', async (data, callback) => {
+
+        // Kurento client
+        // ==============
+
+        const sdpOffer = data.sdpOffer;
+        const kurentoUri = 'ws://localhost:8888/kurento';
+        let kurentoVideoPort = 0;
+        let msVideoConsumer = null;
+
+        Kurento(kurentoUri, (err, kurentoClient) => {
+            if (err) {
+                console.log("Cannot connect to Kurento Media Server at "
+                    + kurentoUri);
+                return callback("Cannot connect to Kurento Media Server at "
+                    + kurentoUri + ", error: " + err);
+            }
+
+            kurentoClient.create('MediaPipeline', (err, pipeline) => {
+                pipeline.create('WebRtcEndpoint', (err, _webRtcEp) => {
+                    webRtcEp = _webRtcEp;
+
+                    webRtcEp.on('OnIceCandidate', (event) => {
+                        const candidate = Kurento.getComplexType('IceCandidate')(event.candidate);
+                        socket.emit('kurentoIceCandidate', candidate);
+                    });
+
+                    while (webRtcEpCandidates.length) {
+                        const candidate = webRtcEpCandidates.shift();
+                        webRtcEp.addIceCandidate(candidate);
+                    }
+
+                    webRtcEp.processOffer(sdpOffer, (err, sdpAnswer) => {
+                        socket.emit('kurentoAnswer', sdpAnswer);
+                    });
+
+                    webRtcEp.gatherCandidates((err) => {
+                    });
+
+                    //J
+                    // webRtcEp.connect(webRtcEp, (err) => {
+                    // });
+                    pipeline.create('RtpEndpoint', (err, rtpEp) => {
+                        const rtpSdpOffer =
+                            "v=0\r\n"
+                            + "o=- 0 0 IN IP4 127.0.0.1\r\n"
+                            + "s=-\r\n"
+                            + "c=IN IP4 127.0.0.1\r\n"
+                            + "t=0 0\r\n"
+                            + "m=video 5004 RTP/AVP 120\r\n"
+                            + "a=rtpmap:120 VP8/90000\r\n"
+                            + "a=rtcp-fb:120 goog-remb\r\n"
+                            + "a=sendonly\r\n"
+                            + "";
+
+                        rtpEp.processOffer(rtpSdpOffer, (err, rtpSdpAnswer) => {
+                            console.log("Kurento RTP SDP Answer:\n" + rtpSdpAnswer);
+
+                            const vPortRegex = /m=video (\d+) RTP\/AVP 120/;
+                            const vPortMatch = vPortRegex.exec(rtpSdpAnswer);
+                            if (vPortMatch) {
+                                kurentoVideoPort = parseInt(vPortMatch[1], 10);
+                                console.log("Kurento RTP video port: " + kurentoVideoPort);
+                            }
+                            else {
+                                console.warn("SDP regex doesn't match");
+                            }
+                        });
+
+                        rtpEp.connect(webRtcEp, (err) => {
+                            /*
+                             * FIXME: Instead of a timer, the creation of Kurento endpoints
+                             * and MediaSoup transports/consumers should be properly
+                             * coordinated.
+                             */
+                            setTimeout(() => {
+                                if (msVideoConsumer) {
+                                    console.log("MediaSoup RTP VIDEO consumer START");
+                                    msVideoConsumer.resume();
+                                }
+                                else {
+                                    console.error("MediaSoup RTP VIDEO consumer not created; you made a mistake somewhere!");
+                                }
+                            }, 1000);
+                        });
+                    });
+                });
+            });
+        });
+
+        socket.on('appIceCandidate', async (data, callback) => {
+            const candidate = Kurento.getComplexType('IceCandidate')(data.candidate);
+
+            if (webRtcEp) {
+                webRtcEp.addIceCandidate(candidate);
+            }
+            else {
+                webRtcEpCandidates.push(candidate);
+            }
+        });
+
+
+
+        // MediaSoup transport and consumer
+        // ================================
+
+        const sessionId = data.sessionId;
+        const sessionRouter = sessions.get(sessionId).router;
+        const videoProducerId = data.videoProducerId;
+        const hasVideo = true;
+
+        // Same code as in socket.on('record')
+        if (hasVideo) {
+            sessionRouter.createPlainRtpTransport(SERVER_CONFIG.mediasoup.plainRtpTransport)
+                .then(plainRtpTransport => {
+                    plainRtpTransport.connect({
+                        ip: SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip,
+                        //port: SERVER_CONFIG.mediasoup.plainRtpTransport.listenPort.videoPort
+                        port: kurentoVideoPort
+                    }).then(() => {
+                        console.log('VIDEO PlainRtpTransport connected');
+                        plainRtpTransport.consume({
+                            producerId: videoProducerId,
+                            rtpCapabilities: sessionRouter.rtpCapabilities,
+                            paused: true
+                        }).then(consumer => {
+                            console.log('PlainRtpTransport consuming VIDEO');
+                            msVideoConsumer = consumer;
+                        }).catch(error => {
+                            console.error(error);
+                        });
+                    }).catch(error => {
+                        console.error(error);
+                    });
+                }).catch(error => {
+                    console.error(error);
+                });
+        }
+    });
+
+    // ------------------------------------------------------------------------
 });
 
 function createWorker() {

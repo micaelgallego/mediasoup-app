@@ -2,6 +2,7 @@ const SERVER_CONFIG = require('./config');
 const MediasoupClient = require('mediasoup-client');
 const SocketClient = require('socket.io-client');
 const SocketPromise = require('./lib/socket.io-promise').promise;
+const KurentoUtils = require('kurento-utils');
 
 let socket = null;
 let device;
@@ -93,6 +94,16 @@ function connectWebSocket() {
 
     socket.on('pong', latency => {
         console.log('pong (' + latency + ' ms of latency)');
+    });
+
+    socket.on('kurentoIceCandidate', candidate => {
+        console.log('kurentoIceCandidate: ' + candidate);
+        webRtcPeer.addIceCandidate(candidate);
+    });
+
+    socket.on('kurentoAnswer', sdpAnswer => {
+        console.log('kurentoAnswer: ' + sdpAnswer);
+        webRtcPeer.processAnswer(sdpAnswer);
     });
 }
 
@@ -644,6 +655,54 @@ function stopRecord() {
     });
 }
 
+// ----------------------------------------------------------------------------
+
+/* Kurento Media Server
+ * ====================
+ */
+
+let webRtcPeer = null;
+
+function connectKurento() {
+    const videoInput = document.getElementById('local-video');
+    const videoOutput = document.getElementById('kurento-video');
+
+    const kurentoOptions = {
+        localVideo: videoInput,
+        remoteVideo: videoOutput,
+        onicecandidate: onAppIceCandidate
+    }
+
+    webRtcPeer = KurentoUtils.WebRtcPeer.WebRtcPeerSendrecv(kurentoOptions,
+        (err) => {
+            if (err) {
+                console.log('ERROR: ' + err);
+                return;
+            }
+
+            webRtcPeer.generateOffer((err, sdpOffer) => {
+                const videoProducer = videoProducers.values().next().value;
+
+                socket.request('connectKurento', {
+                    sessionId,
+                    videoProducerId: videoProducer.id,
+                    sdpOffer,
+                }).then(() => {
+                    console.log('connectKurento');
+                });
+            });
+        });
+}
+
+function onAppIceCandidate(candidate) {
+    socket.request('appIceCandidate', {
+        candidate,
+    }).then(() => {
+        console.log('appIceCandidate');
+    });
+}
+
+// ----------------------------------------------------------------------------
 
 function log(text) {
     const previousLog = document.getElementById('textarea').value;
@@ -673,5 +732,6 @@ module.exports = {
     recordAudio,
     recordVideo,
     recordAudioVideo,
-    stopRecord
+    stopRecord,
+    connectKurento
 };
