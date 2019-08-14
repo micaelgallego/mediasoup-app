@@ -624,7 +624,7 @@ function recordVideo() {
 
 function recordAudioVideo() {
     const audioProducer = audioProducers.values().next().value;
-    const videoProducer = audioProducers.values().next().value;
+    const videoProducer = videoProducers.values().next().value;
     socket.request('record', {
         sessionId,
         videoProducerId: videoProducer.id,
