@@ -3,6 +3,7 @@ const MediasoupClient = require('mediasoup-client');
 const SocketClient = require('socket.io-client');
 const SocketPromise = require('./lib/socket.io-promise').promise;
 
+let socket = null;
 let device;
 const sessionId = 'TestSession';
 const videoProducers = new Map();
@@ -11,14 +12,13 @@ const videoConsumers = new Map();
 const audioConsumers = new Map();
 
 function connectWebSocket() {
-
-    const opts = {
-        path: SERVER_CONFIG.path,
-        transports: ['websocket']
-    };
-
     const serverUrl = 'https://' + SERVER_CONFIG.ip + ':' + SERVER_CONFIG.port;
-    socket = SocketClient(serverUrl, opts);
+
+    socket = SocketClient(serverUrl, {
+        path: SERVER_CONFIG.path,
+        transports: ['websocket'],
+    });
+
     socket.request = SocketPromise(socket);
 
     socket.on('connect', () => {

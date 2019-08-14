@@ -1,10 +1,10 @@
 const SERVER_CONFIG = require('./config');
-const MediaSoup = require('mediasoup');
+const Colors = require('colors/safe');
 const Express = require('express');
 const Fs = require('fs');
 const Https = require('https');
-const SocketIO = require('socket.io');
-const Colors = require('colors/safe');
+const MediaSoup = require('mediasoup');
+const SocketServer = require('socket.io');
 const Spawn = require('child_process').spawn;
 
 expressApp = Express();
@@ -22,12 +22,10 @@ expressApp.use((error, req, res, next) => {
     }
 });
 
-const tls = {
+httpsServer = Https.createServer({
     cert: Fs.readFileSync('./cert/cert.pem'),
     key: Fs.readFileSync('./cert/key.pem'),
-};
-
-httpsServer = Https.createServer(tls, expressApp);
+}, expressApp);
 
 httpsServer.on('error', (err) => {
     console.error('HTTPS error:', err.message);
@@ -93,16 +91,16 @@ let finalUsers = new Map();
 // Collection of recordings
 let recordings = new Map();
 
-const socketServer = SocketIO(httpsServer, {
-    serveClient: false,
+const socketServer = SocketServer(httpsServer, {
     path: SERVER_CONFIG.path,
-    log: false,
-    pingInterval: SERVER_CONFIG.ws.pingInterval,
+    serveClient: false,
     pingTimeout: SERVER_CONFIG.ws.pingTimeout,
-    transports: ['websocket']
+    pingInterval: SERVER_CONFIG.ws.pingInterval,
+    transports: ['websocket'],
+    // log: false,
 });
 
-socketServer.on('connection', socket => {
+socketServer.on('connect', socket => {
     console.log('Client connected from %s:%s', socket.request.connection.remoteAddress, socket.request.connection.remotePort);
 
     finalUsers.set(socket.id, {
@@ -547,7 +545,7 @@ socketServer.on('connection', socket => {
         const cmdArgStr = [
             '-protocol_whitelist file,rtp,udp',  // Only for FFmpeg 4.x
             '-nostdin',
-            '-loglevel debug',
+            //'-loglevel debug',
             // '-analyzeduration 5M',
             // '-probesize 5M',
             // '-thread_queue_size 512',
