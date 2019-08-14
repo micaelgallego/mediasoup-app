@@ -1,71 +1,72 @@
-const Ip = require('ip');
-console.log('Internal IP is %s', Ip.address());
+const Ip = require("ip");
+console.log("Internal IP is %s", Ip.address());
 
 module.exports = {
-    ip: '127.0.0.1',
-    internalIp: Ip.address(),
-    port: 8080,
-    path: '/server',
-    ws: {
-        pingInterval: 25000,
-        pingTimeout: 5000
+  ip: "127.0.0.1",
+  internalIp: Ip.address(),
+  port: 8080,
+  path: "/server",
+  ws: {
+    pingInterval: 25000,
+    pingTimeout: 5000
+  },
+  mediasoup: {
+    worker: {
+      logLevel: "warn",
+      logTags: [
+        "info",
+        "ice",
+        "dtls",
+        "rtp",
+        "srtp",
+        "rtcp"
+        // 'rtx',
+        // 'bwe',
+        // 'score',
+        // 'simulcast',
+        // 'svc'
+      ],
+      rtcMinPort: 32256,
+      rtcMaxPort: 65535
     },
-    mediasoup: {
-        worker: {
-            logLevel: 'warn',
-            logTags: [
-                'info',
-                'ice',
-                'dtls',
-                'rtp',
-                'srtp',
-                'rtcp',
-                // 'rtx',
-                // 'bwe',
-                // 'score',
-                // 'simulcast',
-                // 'svc'
-            ],
-            rtcMinPort: 32256,
-            rtcMaxPort: 65535
+    router: {
+      mediaCodecs: [
+        {
+          kind: "audio",
+          mimeType: "audio/opus",
+          clockRate: 48000,
+          preferredPayloadType: 109,
+          channels: 2
         },
-        router: {
-            mediaCodecs: [{
-                    kind: 'audio',
-                    mimeType: 'audio/opus',
-                    clockRate: 48000,
-                    preferredPayloadType: 109,
-                    channels: 2
-                },
-                {
-                    kind: 'video',
-                    mimeType: 'video/VP8',
-                    clockRate: 90000,
-                    preferredPayloadType: 120,
-                    parameters: {
-                        'x-google-start-bitrate': 1000
-                    }
-                }
-            ]
-        },
-        webRtcTransport: {
-            enableUdp: true,
-            enableTcp: true,
-            preferUdp: true,
-            minimumAvailableOutgoingBitrate: 300000,
-            initialAvailableOutgoingBitrate: 600000
-        },
-        plainRtpTransport: {
-            listenIp: {
-                //ip: Ip.address(),
-                ip: '127.0.0.1',
-                announcedIp: null
-            },
-            listenPort: {
-                audioPort: 5006,
-                videoPort: 5004
-            },
-            maxSctpMessageSize: 262144
+        {
+          kind: "video",
+          mimeType: "video/VP8",
+          clockRate: 90000,
+          preferredPayloadType: 120,
+          parameters: {
+            "x-google-start-bitrate": 1000
+          }
         }
+      ]
+    },
+    webRtcTransport: {
+      enableUdp: true,
+      enableTcp: true,
+      preferUdp: true,
+      minimumAvailableOutgoingBitrate: 300000,
+      initialAvailableOutgoingBitrate: 600000
+    },
+    plainRtpTransport: {
+      listenIp: {
+        //ip: Ip.address(),
+        ip: "127.0.0.1",
+        announcedIp: null
+      },
+      listenPort: {
+        audioPort: 5006,
+        videoPort: 5004
+      },
+      maxSctpMessageSize: 262144
     }
-}
+  }
+};
