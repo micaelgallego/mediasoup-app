@@ -118,12 +118,12 @@ function joinSession() {
       console.log(
         "Session " +
           sessionId +
-          " is associated to mediasoup Router with codecs",
+          " associated to mediasoup Router with rtpCapabilities:",
         response.rtpCapabilities
       );
       log(
         msg +
-          ". Associated mediasoup Router with codecs " +
+          ". Associated to mediasoup Router with rtpCapabilities: " +
           JSON.stringify(
             response.rtpCapabilities.codecs.map(codec => codec.mimeType)
           )

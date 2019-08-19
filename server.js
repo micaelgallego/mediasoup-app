@@ -146,6 +146,10 @@ socketServer.on("connect", socket => {
             users: [socket.id]
           });
 
+          // At this point, the computed router.rtpCapabilities includes the
+          // router codecs enhanced with retransmission and RTCP capabilities,
+          // and the list of RTP header extensions supported by mediasoup.
+
           console.log(router.rtpCapabilities);
 
           callback({
@@ -845,7 +849,7 @@ socketServer.on("connect", socket => {
     const videoProducerId = data.videoProducerId;
     const hasVideo = true;
 
-    // Same code as in socket.on('record')
+    // Same code as in socket.on("record")
     if (hasVideo) {
       sessionRouter
         .createPlainRtpTransport(SERVER_CONFIG.mediasoup.plainRtpTransport)
