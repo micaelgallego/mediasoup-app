@@ -870,16 +870,14 @@ function stopRecord() {
 let webRtcPeer = null;
 
 function connectKurento() {
-  const videoInput = document.getElementById("local-video");
   const videoOutput = document.getElementById("kurento-video");
 
   const kurentoOptions = {
-    localVideo: videoInput,
     remoteVideo: videoOutput,
     onicecandidate: onAppIceCandidate
   };
 
-  webRtcPeer = KurentoUtils.WebRtcPeer.WebRtcPeerSendrecv(
+  webRtcPeer = KurentoUtils.WebRtcPeer.WebRtcPeerRecvonly(
     kurentoOptions,
     err => {
       if (err) {

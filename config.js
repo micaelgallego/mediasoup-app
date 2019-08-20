@@ -69,7 +69,7 @@ module.exports = {
       },
       rtcpMux: true,
       comedia: false,
-      listenPort: {
+      recvPort: {
         audioPort: 5006,
         videoPort: 5004
       }

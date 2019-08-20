@@ -8,7 +8,7 @@ const MediaSoup = require("mediasoup");
 const SocketServer = require("socket.io");
 const Spawn = require("child_process").spawn;
 
-expressApp = Express();
+const expressApp = Express();
 expressApp.use(Express.json());
 expressApp.use(Express.static(__dirname));
 
@@ -23,7 +23,7 @@ expressApp.use((error, req, res, next) => {
   }
 });
 
-httpsServer = Https.createServer(
+const httpsServer = Https.createServer(
   {
     cert: Fs.readFileSync("./cert/cert.pem"),
     key: Fs.readFileSync("./cert/key.pem")
@@ -77,20 +77,20 @@ let msWorker;
 // Developers may think of a mediasoup router as if it were a “multi-party conference room”, although mediasoup is
 // much more low level than that and doesn't constrain itself to specific high level use cases (for instance, a
 // “multi-party conference room” could involve various mediasoup routers, even in different physicals hosts)
-let msRouter;
+let _msRouter;
 
 // A transport connects an endpoint with a mediasoup router and enables transmission of media in both directions by
 // means of Producer and Consumer instances created on it. mediasoup implements the following transport classes:
 // [WebRtcTransport, PlainRtpTransport, PipeTransport]
-let msTransport;
+let _msTransport;
 
 // A producer represents an audio or video source being injected into a mediasoup router. It's created on top of
 // a transport that defines how the media packets are carried
-let msProducer;
+let _msProducer;
 
 // A consumer represents an audio or video source being forwarded from a mediasoup router to an endpoint. It's
 // created on top of a transport that defines how the media packets are carried
-let msConsumer;
+let _msConsumer;
 
 // Collection of sessions
 let sessions = new Map();
@@ -241,8 +241,8 @@ socketServer.on("connect", socket => {
         finalUsers.get(socket.id).producers.set(producer.id, producer);
 
         producer.on("transportclose", () => {});
-        producer.on("score", score => {});
-        producer.on("videoorientationchange", videoOrientation => {});
+        producer.on("score", _score => {});
+        producer.on("videoorientationchange", _videoOrientation => {});
 
         callback({
           id: producer.id
@@ -435,7 +435,7 @@ socketServer.on("connect", socket => {
       });
   });
 
-  socket.on("pauseConsumer", async (data, callback, errback) => {
+  socket.on("pauseConsumer", async (data, callback, _err) => {
     const consumer = finalUsers.get(socket.id).consumers.get(data.consumerId);
     if (!consumer.paused) {
       consumer.pause();
@@ -479,7 +479,7 @@ socketServer.on("connect", socket => {
 
   let stopRecordingCallbackFunction;
   const stopRecordingCallback = () => {
-    if (!!stopRecordingCallbackFunction) {
+    if (stopRecordingCallbackFunction) {
       stopRecordingCallbackFunction();
     }
   };
@@ -518,8 +518,7 @@ socketServer.on("connect", socket => {
           plainRtpTransport
             .connect({
               ip: SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip,
-              port:
-                SERVER_CONFIG.mediasoup.plainRtpTransport.listenPort.audioPort
+              port: SERVER_CONFIG.mediasoup.plainRtpTransport.recvPort.audioPort
             })
             .then(() => {
               console.log("AUDIO PlainRtpTransport connected");
@@ -555,8 +554,7 @@ socketServer.on("connect", socket => {
           plainRtpTransport
             .connect({
               ip: SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip,
-              port:
-                SERVER_CONFIG.mediasoup.plainRtpTransport.listenPort.videoPort
+              port: SERVER_CONFIG.mediasoup.plainRtpTransport.recvPort.videoPort
             })
             .then(() => {
               console.log("VIDEO PlainRtpTransport connected");
@@ -673,7 +671,7 @@ socketServer.on("connect", socket => {
       } else {
         console.error("Error stopping recording");
       }
-      if (!!stopRecordingCallback) {
+      if (stopRecordingCallback) {
         stopRecordingCallback();
       }
     });
@@ -713,7 +711,6 @@ socketServer.on("connect", socket => {
   });
 
   socket.on("stopRecord", async (data, callback) => {
-    const sessionId = data.sessionId;
     const recording = recordings.get(data.sessionId);
 
     stopRecordingCallbackFunction = callback;
@@ -733,6 +730,9 @@ socketServer.on("connect", socket => {
 
   /* Kurento Media Server
    * ====================
+   *
+   * - To send RTP to mediasoup: https://mediasoup.org/documentation/v3/communication-between-client-and-server/#producing-media-from-an-external-endpoint
+   * - To receive RTP from mediasoup: https://mediasoup.org/documentation/v3/communication-between-client-and-server/#consuming-media-in-an-external-endpoint
    */
 
   let webRtcEp = null;
@@ -745,9 +745,8 @@ socketServer.on("connect", socket => {
     const sdpOffer = data.sdpOffer;
     const kurentoUri = "ws://localhost:8888/kurento";
     let kurentoVideoPort = 0;
-    let msVideoConsumer = null;
 
-    Kurento(kurentoUri, (err, kurentoClient) => {
+    Kurento(kurentoUri, async (err, kurentoClient) => {
       if (err) {
         console.log("Cannot connect to Kurento Media Server at " + kurentoUri);
         return callback(
@@ -758,8 +757,11 @@ socketServer.on("connect", socket => {
         );
       }
 
-      kurentoClient.create("MediaPipeline", (err, pipeline) => {
-        pipeline.create("WebRtcEndpoint", (err, _webRtcEp) => {
+      kurentoClient.create("MediaPipeline", async (err, pipeline) => {
+        // Kurento WebRtcEndpoint
+        // ----------------------
+
+        pipeline.create("WebRtcEndpoint", async (err, _webRtcEp) => {
           webRtcEp = _webRtcEp;
 
           webRtcEp.on("OnIceCandidate", event => {
@@ -778,26 +780,63 @@ socketServer.on("connect", socket => {
             socket.emit("kurentoAnswer", sdpAnswer);
           });
 
-          webRtcEp.gatherCandidates(err => {});
+          webRtcEp.gatherCandidates(_err => {});
 
           //J
-          // webRtcEp.connect(webRtcEp, (err) => {
+          // webRtcEp.connect(webRtcEp, err => {
+          //   if (err) {
+          //     console.error("Kurento ERROR:", err);
+          //   }
+          //   startMsConsumer();
           // });
-          pipeline.create("RtpEndpoint", (err, rtpEp) => {
+
+          // Kurento RtpEndpoint
+          // -------------------
+
+          const sessionId = data.sessionId;
+          const sessionRouter = sessions.get(sessionId).router;
+          const videoProducerId = data.videoProducerId;
+
+          const rtpTransport = await sessionRouter.createPlainRtpTransport(
+            SERVER_CONFIG.mediasoup.plainRtpTransport
+          );
+
+          const videoPort = rtpTransport.tuple.localPort;
+
+          const videoConsumer = await rtpTransport.consume({
+            producerId: videoProducerId,
+            rtpCapabilities: sessionRouter.rtpCapabilities,
+            paused: true
+          });
+
+          const videoSsrc = videoConsumer.rtpParameters.encodings[0].ssrc;
+          const videoCname = videoConsumer.rtpParameters.rtcp.cname;
+
+          pipeline.create("RtpEndpoint", async (err, rtpEp) => {
+            rtpEp.connect(webRtcEp, "VIDEO", err => {
+              if (err) {
+                console.error("Kurento ERROR:", err);
+              }
+            });
+
+            // prettier-ignore
             const rtpSdpOffer =
               "v=0\r\n" +
               "o=- 0 0 IN IP4 127.0.0.1\r\n" +
               "s=-\r\n" +
               "c=IN IP4 127.0.0.1\r\n" +
               "t=0 0\r\n" +
-              "m=video 5004 RTP/AVP 120\r\n" +
+              "m=video " + videoPort + " RTP/AVP 120\r\n" +
+              "a=rtcp-mux\r\n" +
               "a=rtpmap:120 VP8/90000\r\n" +
-              "a=rtcp-fb:120 goog-remb\r\n" +
               "a=sendonly\r\n" +
+              "a=ssrc:" + videoSsrc + " cname:" + videoCname + "\r\n" +
               "";
 
-            rtpEp.processOffer(rtpSdpOffer, (err, rtpSdpAnswer) => {
-              console.log("Kurento RTP SDP Answer:\n" + rtpSdpAnswer);
+            console.log("RTP SDP Offer from app:\n" + rtpSdpOffer);
+
+            rtpEp.processOffer(rtpSdpOffer, async (err, rtpSdpAnswer) => {
+              console.log("RTP SDP Answer from Kurento:\n" + rtpSdpAnswer);
 
               const vPortRegex = /m=video (\d+) RTP\/AVP 120/;
               const vPortMatch = vPortRegex.exec(rtpSdpAnswer);
@@ -807,23 +846,29 @@ socketServer.on("connect", socket => {
               } else {
                 console.warn("SDP regex doesn't match");
               }
-            });
 
-            rtpEp.connect(webRtcEp, err => {
-              /*
-               * FIXME: Instead of a timer, the creation of Kurento endpoints
-               * and MediaSoup transports/consumers should be properly
-               * coordinated.
-               */
-              setTimeout(() => {
-                if (msVideoConsumer) {
-                  console.log("MediaSoup RTP VIDEO consumer START");
-                  msVideoConsumer.resume();
-                } else {
-                  console.error(
-                    "MediaSoup RTP VIDEO consumer not created; you made a mistake somewhere!"
-                  );
-                }
+              await rtpTransport.connect({
+                ip: SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip,
+                port: kurentoVideoPort
+                // rtcpPort: Same as RTP, due to rtcp-mux
+              });
+              console.log(
+                "VIDEO PlainRtpTransport RTP connected to " +
+                  SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip +
+                  ":" +
+                  kurentoVideoPort
+              );
+              console.log(
+                "VIDEO PlainRtpTransport RTCP connected to " +
+                  SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip +
+                  ":" +
+                  (kurentoVideoPort + 1)
+              );
+
+              // FIXME: Why is this artificial delay needed?
+              // Without it, the media doesn't really arrive
+              setTimeout(async () => {
+                await videoConsumer.resume();
               }, 1000);
             });
           });
@@ -831,7 +876,7 @@ socketServer.on("connect", socket => {
       });
     });
 
-    socket.on("appIceCandidate", async (data, callback) => {
+    socket.on("appIceCandidate", async (data, _callback) => {
       const candidate = Kurento.getComplexType("IceCandidate")(data.candidate);
 
       if (webRtcEp) {
@@ -840,50 +885,6 @@ socketServer.on("connect", socket => {
         webRtcEpCandidates.push(candidate);
       }
     });
-
-    // MediaSoup transport and consumer
-    // ================================
-
-    const sessionId = data.sessionId;
-    const sessionRouter = sessions.get(sessionId).router;
-    const videoProducerId = data.videoProducerId;
-    const hasVideo = true;
-
-    // Same code as in socket.on("record")
-    if (hasVideo) {
-      sessionRouter
-        .createPlainRtpTransport(SERVER_CONFIG.mediasoup.plainRtpTransport)
-        .then(plainRtpTransport => {
-          plainRtpTransport
-            .connect({
-              ip: SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip,
-              //port: SERVER_CONFIG.mediasoup.plainRtpTransport.listenPort.videoPort
-              port: kurentoVideoPort
-            })
-            .then(() => {
-              console.log("VIDEO PlainRtpTransport connected");
-              plainRtpTransport
-                .consume({
-                  producerId: videoProducerId,
-                  rtpCapabilities: sessionRouter.rtpCapabilities,
-                  paused: true
-                })
-                .then(consumer => {
-                  console.log("PlainRtpTransport consuming VIDEO");
-                  msVideoConsumer = consumer;
-                })
-                .catch(error => {
-                  console.error(error);
-                });
-            })
-            .catch(error => {
-              console.error(error);
-            });
-        })
-        .catch(error => {
-          console.error(error);
-        });
-    }
   });
 
   // ------------------------------------------------------------------------
@@ -969,7 +970,7 @@ createWorker()
     });
     console.log("mediasoup worker initialized\n");
   })
-  .catch(error => {
+  .catch(_err => {
     console.error("Error initializing mediasoup worker");
   });
 
