@@ -6,7 +6,7 @@ import express, { NextFunction, Request, Response } from "express";
 import fs from "fs";
 import https from "https";
 import Kurento, { WebRtcEndpoint, IceCandidate } from "kurento-client";
-import mediasoup, { Worker, Router, WebRtcTransport, Producer, Consumer, PlainRtpTransport } from "mediasoup";
+import mediasoup, { Worker, Router, WebRtcTransport, Producer, Consumer, PlainRtpTransport, RtcpFeedback } from "mediasoup";
 import socketServer from "socket.io";
 import Spawn from "child_process";
 
@@ -540,8 +540,8 @@ server.on("connect", socket => {
 
           plainRtpTransport
             .connect({
-              ip: SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip,
-              port: SERVER_CONFIG.mediasoup.plainRtpTransport.appData.recvPort.audioPort
+              ip: SERVER_CONFIG.rtpConnection.remoteIp,
+              port: SERVER_CONFIG.rtpConnection.recvPort.audioPort
             })
             .then(() => {
               console.log("AUDIO PlainRtpTransport connected");
@@ -576,8 +576,8 @@ server.on("connect", socket => {
 
           plainRtpTransport
             .connect({
-              ip: SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip,
-              port: SERVER_CONFIG.mediasoup.plainRtpTransport.appData.recvPort.videoPort
+              ip: SERVER_CONFIG.rtpConnection.remoteIp,
+              port: SERVER_CONFIG.rtpConnection.recvPort.videoPort
             })
             .then(() => {
               console.log("VIDEO PlainRtpTransport connected");
@@ -871,19 +871,19 @@ server.on("connect", socket => {
               }
 
               await rtpTransport.connect({
-                ip: SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip,
+                ip: SERVER_CONFIG.rtpConnection.remoteIp,
                 port: kurentoVideoPort
                 // rtcpPort: Same as RTP, due to rtcp-mux
               });
               console.log(
                 "VIDEO PlainRtpTransport RTP connected to " +
-                  SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip +
+                SERVER_CONFIG.rtpConnection.remoteIp +
                   ":" +
                   kurentoVideoPort
               );
               console.log(
                 "VIDEO PlainRtpTransport RTCP connected to " +
-                  SERVER_CONFIG.mediasoup.plainRtpTransport.listenIp.ip +
+                SERVER_CONFIG.rtpConnection.remoteIp +
                   ":" +
                   (kurentoVideoPort + 1)
               );
