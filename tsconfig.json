@@ -1,0 +1,20 @@
+{
+    "compilerOptions": {
+        "module": "system",
+        "noImplicitAny": true,
+        "removeComments": true,
+        "preserveConstEnums": true,
+        "sourceMap": false,
+        "typeRoots": [
+            "customTypings",
+            "node_modules/@types"
+          ]
+    },
+    "include": [
+        "*.ts",
+        "customTypings/*.d.ts"
+    ],
+    "exclude": [
+        "node_modules"
+    ]
+}
